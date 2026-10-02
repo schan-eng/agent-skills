@@ -1,0 +1,17 @@
+{
+  "name": "agent-board",
+  "version": "0.1.0",
+  "description": "A local kanban board over Claude Code and Codex sessions, with a journal and daily digests.",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-board": "bin/agent-board.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node bin/agent-board.mjs start",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}
