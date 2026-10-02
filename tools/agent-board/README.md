@@ -56,7 +56,7 @@ The **Context** column and context chips come from a Claude Code hook. Add it to
 ]
 ```
 
-Sessions pick up hook changes when they start.
+Running sessions pick up hook changes without a restart.
 
 Start the board from a real terminal. A board started inside a sandboxed agent session inherits that
 sandbox, and so do the sessions and model calls it starts.
