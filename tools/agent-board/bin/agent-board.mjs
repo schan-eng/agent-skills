@@ -107,7 +107,7 @@ async function migrate(from) {
   if (!(await exists(from))) return say(`Nothing to migrate: ${from} does not exist.`);
   const [src, dest] = await Promise.all([fs.realpath(from), fs.mkdir(DATA, { recursive: true }).then(() => fs.realpath(DATA))]);
   if (src === dest) fail(`${from} is the data folder.`);
-  // The cache moves to a visible folder; its run folder only ever holds a call in progress.
+  // The cache's run folder only ever holds a model call in progress, so it is not data.
   const runDir = join(src, ".cache", "run");
   const copied = [];
   const kept = [];
