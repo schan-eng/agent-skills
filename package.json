@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "setup": "bash setup.sh",
-    "test": "node --experimental-strip-types --test opencode/plugin/agent-hooks.test.ts && python3 -m unittest -v hooks/test_agent_activity.py",
+    "test": "node --experimental-strip-types --test opencode/plugin/agent-hooks.test.ts && python3 -m unittest -v hooks/test_agent_activity.py && node --test \"tools/agent-board/test/*.test.mjs\"",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

@@ -8,6 +8,7 @@ Canonical, agent-neutral skills and hook logic shared by coding-agent clients.
 - `hooks/`: Python standard-library runtime plus tests.
 - `opencode/commands/`: OpenCode slash-command adapters for explicit skills.
 - `opencode/plugin/`: OpenCode hook adapter plus tests.
+- `tools/agent-board/`: a local kanban board over Claude Code and Codex sessions; see its README.
 
 `setup.sh` links OpenCode commands and the hook plugin into its config
 directory. Claude-specific adapters and settings remain versioned separately
