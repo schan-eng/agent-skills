@@ -24,11 +24,16 @@ export function strictSchema(s) {
 }
 
 // Codex does not ask before an MCP call in exec mode, so every server is switched off except the tools `allow` names.
+// Plugins go too: their servers are not in config.toml, so a per-server override fails there ("invalid transport").
+const NO_PLUGINS = ["-c", "features.plugins=false"];
 async function mcpFlags(allow) {
-  const { stdout } = await promisify(execFile)("codex", ["mcp", "list", "--json"], { timeout: 30_000 });
-  return JSON.parse(stdout).flatMap(({ name }) =>
-    allow[name] ? ["-c", `mcp_servers.${name}.enabled_tools=${JSON.stringify(allow[name])}`] : ["-c", `mcp_servers.${name}.enabled=false`],
-  );
+  const { stdout } = await promisify(execFile)("codex", ["mcp", "list", "--json", ...NO_PLUGINS], { timeout: 30_000 });
+  return [
+    ...NO_PLUGINS,
+    ...JSON.parse(stdout).flatMap(({ name }) =>
+      allow[name] ? ["-c", `mcp_servers.${name}.enabled_tools=${JSON.stringify(allow[name])}`] : ["-c", `mcp_servers.${name}.enabled=false`],
+    ),
+  ];
 }
 
 const failure = (text) => {

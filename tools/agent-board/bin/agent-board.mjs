@@ -34,9 +34,12 @@ async function until(check, timeoutMs) {
   return false;
 }
 
-// The process listening on the board's port, whatever started it; lsof exits non-zero when nothing listens.
+// The process listening on the board's port, whatever started it. netstat reads the kernel's socket table, where lsof
+// can hang for good on a process it cannot inspect. Its rows end in `name:pid` after the state column.
 async function listener() {
-  const pid = await run("lsof", ["-nP", `-iTCP:${PORT}`, "-sTCP:LISTEN", "-t"]).then(({ stdout }) => Number(stdout.trim().split("\n")[0]) || null, () => null);
+  const { stdout } = await run("netstat", ["-anv", "-p", "tcp"], { timeout: 10_000 }).catch((e) => fail(`netstat failed: ${e.message}`));
+  const row = stdout.split("\n").map((l) => l.trim().split(/\s+/)).find((f) => f[5] === "LISTEN" && f[3]?.endsWith(`.${PORT}`));
+  const pid = Number(row?.slice(6).find((f) => /:\d+$/.test(f))?.split(":").at(-1)) || null;
   if (!pid) return null;
   const ps = (field) => run("ps", ["-p", String(pid), "-o", `${field}=`]).then(({ stdout }) => stdout.trim(), () => "");
   const [command, pgid] = await Promise.all([ps("command"), ps("pgid")]);

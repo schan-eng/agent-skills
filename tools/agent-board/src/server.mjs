@@ -16,6 +16,7 @@ import { codexShort, createCodexAgents } from "./codex-agents.mjs";
 import { createDigests, validDay } from "./digest.mjs";
 import { createJournal } from "./journal.mjs";
 import { CACHE, DATA, RUN_DIR } from "./paths.mjs";
+import { createPrs } from "./prs.mjs";
 import { accept, refuse } from "./ws.mjs";
 import { cleanEnv, createGrouper, createRunner, createSummarizer, jsonStore } from "./summarize.mjs";
 
@@ -89,6 +90,7 @@ const digests = createDigests({
   toolsDir: () => toolsDir(),
   autoHour: Number(process.env.AGENT_BOARD_DIGEST_HOUR ?? 7),
 });
+const prs = createPrs();
 // Keeps the known engines from a saved file, so a bad or partial one leaves the defaults.
 const enginesOf = (next, prev) => Object.fromEntries(Object.entries(prev).map(([k, v]) => [k, ENGINES.includes(next?.[k]) ? next[k] : v]));
 // Tags are the user's own data, so they live at the top of the data folder rather than in the disposable cache.
@@ -843,7 +845,7 @@ async function board() {
   grouper.request(groupRequest(cards.filter((c) => !c.archived)));
   const dirCounts = gathered.map((g) => g.job?.cwd ?? g.a.cwd).reduce((m, d) => m.set(d, (m.get(d) ?? 0) + 1), new Map());
   const dirs = [...dirCounts].toSorted((x, y) => y[1] - x[1]).map(([d]) => d);
-  return { error: [error, codexed.error].filter(Boolean).join(" · ") || null, cards, dirs, defaults: await defaultSettings(), engines: settings.engines, summaries: runner.stats, grouping: grouper.pending(), groupSummaries: grouper.summaries(), outcomes: OUTCOMES, pins: pins.map((p) => ({ ...p, source: describe(fill(p.source)) })), hides, at: Date.now() };
+  return { error: [error, codexed.error].filter(Boolean).join(" · ") || null, cards, dirs, defaults: await defaultSettings(), engines: settings.engines, summaries: runner.stats, grouping: grouper.pending(), groupSummaries: grouper.summaries(), outcomes: OUTCOMES, pins: pins.map((p) => ({ ...p, source: describe(fill(p.source)) })), hides, linearWorkspace: facts.linearWorkspace ?? null, prs: prs.counts(), at: Date.now() };
 }
 
 async function waitFor(check, timeoutMs) {
@@ -1427,7 +1429,7 @@ async function markdownFile(dir, raw) {
 }
 
 async function journalRoute(req, res, path) {
-  if (path === "/api/journal") return send(res, 200, { ...journal.get(), linearWorkspace: facts.linearWorkspace ?? null });
+  if (path === "/api/journal") return send(res, 200, journal.get());
   if (path === "/api/journal/summarize") {
     if (req.method !== "POST") return send(res, 405, { error: "POST only" });
     if (!runner.enabled) return send(res, 409, { ok: false, message: "Model calls are off (AGENT_BOARD_SUMMARIZE=0)." });
@@ -1478,7 +1480,16 @@ const server = createServer(async (req, res) => {
   if (req.method !== "GET" && req.headers["x-agent-board"] !== "1") return send(res, 403, { error: "missing x-agent-board header" });
   try {
     if (url.pathname === "/") return send(res, 200, await fs.readFile(join(HERE, "index.html"), "utf8"), "text/html; charset=utf-8");
-    if (url.pathname === "/api/board") return send(res, 200, await board());
+    // A page polls the board every few seconds, which keeps its PR list fresh only while someone is looking.
+    if (url.pathname === "/api/board") {
+      prs.fresh();
+      return send(res, 200, await board());
+    }
+    if (url.pathname === "/api/prs") {
+      if (req.method === "POST") await prs.refresh();
+      else prs.fresh();
+      return send(res, 200, prs.get());
+    }
     if (url.pathname.startsWith("/api/journal")) return await journalRoute(req, res, url.pathname);
     if (url.pathname === "/api/digest") return send(res, 200, digests.get());
     const digestKind = url.pathname.match(/^\/api\/digest\/(repo|notion|slack)$/)?.[1];
