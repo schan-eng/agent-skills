@@ -20,6 +20,8 @@ A local kanban board over your Claude Code and Codex sessions, at <http://127.0.
   and what happened in Slack. Yesterday's are written each morning; any recent day can be updated.
 - **Agent view**: `claude agents` or `codex agents` in a docked terminal, and a dialog that starts
   either kind of session.
+- **Terminal**: the same board in the terminal you run `agent-board` in, where `a` hands the terminal
+  to a session and leaving the session brings the board back. See [In a terminal](#in-a-terminal).
 
 It needs no packages: just Node and the CLIs it drives.
 
@@ -39,8 +41,8 @@ From this folder:
 
 ```bash
 node bin/agent-board.mjs install   # links ~/.local/bin/agent-board here, migrates old data
-agent-board start
-agent-board open
+agent-board                        # the board in this terminal, starting it first if needed
+agent-board open                   # the board in the browser
 ```
 
 `install` copies data from `~/.claude/tools/agent-board`, where the board lived before it was a
@@ -68,6 +70,7 @@ sandbox, and so do the sessions and model calls it starts.
 
 | Command | What it does |
 | --- | --- |
+| `agent-board tui` | The board in this terminal, starting it first if needed. Plain `agent-board` does this in a terminal. |
 | `agent-board start` | Starts the board in the background, logging to the data folder. |
 | `agent-board stop` | Stops it, including one started by hand. |
 | `agent-board restart` | Stops it, then starts this checkout's code. |
@@ -78,6 +81,29 @@ sandbox, and so do the sessions and model calls it starts.
 | `agent-board install` | Links `~/.local/bin/agent-board` to this checkout and migrates old data. |
 | `agent-board migrate [--from DIR]` | Copies data from DIR without overwriting; merges the context log. |
 | `agent-board log-context` | The PostToolUse hook above; reads the hook event on stdin. |
+
+## In a terminal
+
+`agent-board` draws the board in the terminal it runs in, from the same server as the page. From 100
+columns wide the columns sit side by side; narrower, they are listed one under another.
+
+| Keys | Where | What they do |
+| --- | --- | --- |
+| `1` to `5`, Tab | Anywhere; Tab outside a session | Board, PRs, Archived, Daily, Journal. |
+| Arrows or `h` `j` `k` `l`, `g` `G`, PgUp PgDn | Anywhere | Move, or scroll. |
+| `/` | Board, PRs, Archived | Filters as you type; Esc clears it. |
+| Enter | A session | Opens its summary, conversation and links; Enter again attaches. |
+| `a` | A session | Attaches: the session takes the terminal (`claude attach`, `claude --resume` for a stopped one, or `codex resume`), and the board comes back when it exits. |
+| `m` `i` `s` `R` `A` `u` `o` | A session | Message, interrupt, summarize, rename, archive, unarchive, open in a Terminal window. |
+| `n`, `N` | Anywhere | Starts a Claude or a Codex session: what it should do, then the folder, where Tab offers the folders sessions run in. |
+| Enter, `s`, `r` | PRs | Opens the pull request on GitHub, opens the session that worked on it, reads GitHub again. |
+| ← →, `u` | Daily | Changes the day; updates one of its digests. |
+| `?`, Ctrl+Z, `q` | Anywhere | The keys, suspend, quit; in an open session `q`, like Esc, goes back. |
+
+In Claude Code, ← on an empty prompt opens its agent view, and exiting that returns to the board; the
+session keeps running. Ctrl+Z there suspends the session's screen and the board together, and `fg`
+brings both back. The Journal is read-only in the terminal: its to-dos and notes are edited on the
+page. `NO_COLOR` turns colors off.
 
 ## Data
 
@@ -138,7 +164,8 @@ origin. Summaries paraphrase Slack and never quote it.
 npm test
 ```
 
-`src/server.mjs` is the HTTP and WebSocket server; `src/index.html` is the whole page. Beside them:
+`src/server.mjs` is the HTTP and WebSocket server; `src/index.html` is the whole page, and `src/tui.mjs`
+the terminal board, drawn with `term.mjs`. Beside them:
 `codex-agents.mjs` reads Codex threads from its app-server daemon, `codex.mjs` and `summarize.mjs`
 make model calls, `prs.mjs`, `journal.mjs` and `digest.mjs` back the PRs, Journal and Daily tabs,
 `context.mjs` and `conversation.mjs` read transcripts, `pty.mjs` and `ws.mjs` carry the terminals,
