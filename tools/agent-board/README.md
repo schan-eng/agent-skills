@@ -22,7 +22,7 @@ It needs no packages: just Node and the CLIs it drives.
 
 ## Requirements
 
-- macOS (it opens Terminal and uses `lsof`), and Node 24 or later.
+- macOS (it opens Terminal and reads `netstat`), and Node 24 or later.
 - Claude Code (`claude`), signed in.
 - Optional: Codex (`codex`), for Codex cards and the Codex engine; `gh`, signed in, for the Daily
   repository digest and pull-request outcomes.

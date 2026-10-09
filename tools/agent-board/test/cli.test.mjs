@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -61,6 +63,14 @@ test("status reports the data folder and that nothing runs on a free port", asyn
   const out = await cli("status");
   assert.match(out, /^Not running\./);
   assert.ok(out.includes(`Data: ${home}`));
+});
+
+test("status names the process holding the port when it is not the board", async (t) => {
+  const { cli } = await sandbox(t);
+  const server = createServer().listen(47998, "127.0.0.1");
+  await once(server, "listening");
+  t.after(() => server.close());
+  assert.match(await cli("status"), new RegExp(`^Not running; port 47998 is held by pid ${process.pid}: `));
 });
 
 test("log-context writes what a hook event touched into the data folder", async (t) => {
