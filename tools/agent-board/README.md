@@ -9,6 +9,9 @@ A local kanban board over your Claude Code and Codex sessions, at <http://127.0.
 - **Drawer**: a session's conversation, summary, spec, progress, team, context and a live terminal.
   From it you can message, interrupt, rename, archive, restart or delete the session, or open it in
   Terminal.
+- **PRs**: your open pull requests on GitHub in columns by who acts next (Needs you, Waiting for
+  review, Approved, Draft), each with why, its reviewers, checks, unresolved threads and the sessions
+  that worked on it. They are read again every few minutes while the page is open, or on Refresh.
 - **Archived**: a timeline of archived sessions with an outcome for each, restorable with their
   conversations.
 - **Journal**: to-dos by horizon, notes, and a summary of where things stand from Linear, Slack and
@@ -24,8 +27,8 @@ It needs no packages: just Node and the CLIs it drives.
 
 - macOS (it opens Terminal and reads `netstat`), and Node 24 or later.
 - Claude Code (`claude`), signed in.
-- Optional: Codex (`codex`), for Codex cards and the Codex engine; `gh`, signed in, for the Daily
-  repository digest and pull-request outcomes.
+- Optional: Codex (`codex`), for Codex cards and the Codex engine; `gh`, signed in, for the PRs tab,
+  the Daily repository digest and pull-request outcomes.
 - For the Journal summary and the Daily Notion and Slack digests: the Linear, Notion and Slack Claude
   Code plugins. Plugins enabled in a project's `.claude/settings.json` load only in that project, so
   the board runs those calls in the folder where most sessions run, or in `AGENT_BOARD_JOURNAL_CWD`.
@@ -137,6 +140,6 @@ npm test
 
 `src/server.mjs` is the HTTP and WebSocket server; `src/index.html` is the whole page. Beside them:
 `codex-agents.mjs` reads Codex threads from its app-server daemon, `codex.mjs` and `summarize.mjs`
-make model calls, `journal.mjs` and `digest.mjs` back the Journal and Daily tabs, `context.mjs` and
-`conversation.mjs` read transcripts, `pty.mjs` and `ws.mjs` carry the terminals, and `paths.mjs`
-places the data folder.
+make model calls, `prs.mjs`, `journal.mjs` and `digest.mjs` back the PRs, Journal and Daily tabs,
+`context.mjs` and `conversation.mjs` read transcripts, `pty.mjs` and `ws.mjs` carry the terminals,
+and `paths.mjs` places the data folder.

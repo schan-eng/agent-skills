@@ -328,6 +328,18 @@ a.src:hover { background: var(--accent); }
 .dl-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .dl-top .views { flex-wrap: wrap; }
 .dl-top .muted { font-size: 12px; }
+.pr-top { display: flex; gap: 10px; align-items: center; padding-top: 12px; font-size: 12px; }
+.pr-top .btn { margin-left: auto; }
+.card.pr .ref { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+.card.pr .t { font-size: 13.5px; }
+.card.pr .why { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12.5px; color: var(--c); }
+.card.pr .who { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.card.pr .who .ok { color: var(--done); }
+.card.pr .who .no { color: var(--stopped); }
+.card.pr .row { flex-wrap: wrap; overflow: visible; }
+.card.pr .row .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.card.pr button.chip { background: none; color: inherit; font: inherit; cursor: pointer; }
+.views .chip { font-size: 11px; padding: 0 6px; margin-left: 2px; }
 .dl-top select { margin-left: auto; background: var(--field); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12.5px; }
 .dl-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
 @media (max-width: 1200px) { .dl-cols { grid-template-columns: 1fr; } }
@@ -513,7 +525,7 @@ let compact = store.get("agent-board-compact", "0") === "1";
 let specsOn = store.get("agent-board-specs", "0") === "1";
 let collapsed = new Set();
 try { collapsed = new Set(JSON.parse(store.get("agent-board-collapsed", "[]"))); } catch {}
-const VIEWS = [["board", "Board"], ["archived", "Archived"], ["journal", "Journal"], ["daily", "Daily"]];
+const VIEWS = [["board", "Board"], ["prs", "PRs"], ["archived", "Archived"], ["journal", "Journal"], ["daily", "Daily"]];
 let view = VIEWS.some(([v]) => v === store.get("agent-board-view")) ? store.get("agent-board-view") : "board";
 const TABS = ["conversation", "summary", "context", "spec", "progress", "team", "terminal"];
 // Live tabs keep their own content up to date instead of being redrawn on every poll.
@@ -778,13 +790,15 @@ const searchText = (c) => {
 function render() {
   query = document.getElementById("q").value.toLowerCase();
   const cards = data.cards.filter((c) => !query || searchText(c).includes(query));
-  const archivedCount = data.cards.filter((c) => c.archived).length;
+  const counts = { archived: data.cards.filter((c) => c.archived).length, prs: data.prs?.open };
+  const flag = (v) => (v === "prs" && data.prs?.needsYou ? ` <span class="chip warn" title="${data.prs.needsYou} need you">${data.prs.needsYou}</span>` : "");
   document.getElementById("views").innerHTML = VIEWS.map(([v, label]) =>
-    `<button data-view="${v}" class="${v === view ? "on" : ""}">${label}${v === "archived" ? ` <span class="n">${archivedCount}</span>` : ""}</button>`).join("");
+    `<button data-view="${v}" class="${v === view ? "on" : ""}">${label}${counts[v] != null ? ` <span class="n">${counts[v]}</span>` : ""}${flag(v)}</button>`).join("");
   document.getElementById("laneslabel").hidden = view !== "board";
   document.getElementById("compactlabel").hidden = view !== "board";
   document.getElementById("specslabel").hidden = view !== "board";
   const box = document.getElementById("board");
+  if (view === "prs") return renderPrs(box);
   if (view === "journal") return renderJournal(box);
   if (view === "daily") return renderDaily(box);
   if (view === "archived") {
@@ -908,7 +922,7 @@ function linkText(s) {
   let out = "";
   let at = 0;
   for (const m of s.matchAll(LINK_RE)) {
-    const url = m[1] ?? (journal?.linearWorkspace ? `https://linear.app/${journal.linearWorkspace}/issue/${m[2]}` : null);
+    const url = m[1] ?? (data.linearWorkspace ? `https://linear.app/${data.linearWorkspace}/issue/${m[2]}` : null);
     const shown = m[1]?.length > 60 ? `${m[1].slice(0, 57)}…` : m[0];
     out += esc(s.slice(at, m.index)) + (url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(shown)}</a>` : esc(m[0]));
     at = m.index + m[0].length;
@@ -1142,6 +1156,87 @@ function dailyClick(e) {
   }
 }
 
+// ---- PRs tab: the person's open pull requests on GitHub, in columns by who acts next. The server reads them again
+// every few minutes while a page is open; Refresh reads them now.
+const PR_COLS = [
+  ["needs-you", "Needs you", "--needs"],
+  ["waiting", "Waiting for review", "--working"],
+  ["approved", "Approved", "--done"],
+  ["draft", "Draft", "--muted"],
+];
+const REVIEW_MARKS = { APPROVED: ["ok", "✓", "approved"], CHANGES_REQUESTED: ["no", "✗", "requested changes"], COMMENTED: ["", "💬", "commented"], DISMISSED: ["", "–", "had a review dismissed"] };
+const CHECK_CHIPS = { pass: ["", "✓ checks", "Every check passed"], fail: ["bad", "✗ checks", "A check failed"], pending: ["warn", "● checks", "Checks are still running"] };
+let prList = null;
+// Sessions that worked on a pull request: they made it or were asked about it, or work in a worktree that has its branch
+// or looked at it. Codex reports the branch of any checkout, so its branch counts only in a worktree.
+const inWorktree = (c) => Boolean(c.cwd?.includes("/.claude/worktrees/"));
+const workedOn = (c, pr) =>
+  (c.branch === pr.head && (c.agent !== "codex" || inWorktree(c))) ||
+  (c.context ?? []).some((s) => s.kind === "pr" && s.id === pr.id && (s.produced || s.linked || inWorktree(c)));
+const sessionsOf = (pr) => data.cards.filter((c) => workedOn(c, pr));
+function prCard(pr, color) {
+  const reviewer = (r) => {
+    const [cls, sign, did] = REVIEW_MARKS[r.state] ?? ["", "·", r.state.toLowerCase()];
+    return `<span class="${cls}" title="${esc(`${r.who} ${did} ${ago(r.at)}`)}">${sign} ${esc(r.who)}</span>`;
+  };
+  const who = [...pr.reviews.map(reviewer), ...pr.requested.map((n) => `<span title="Review requested from ${esc(n)}">● ${esc(n)}</span>`)].join("");
+  const [checkCls, checkLabel, checkTip] = CHECK_CHIPS[pr.checks] ?? [];
+  const parent = prList.prs.find((p) => p.repo === pr.repo && p.head === pr.base);
+  const chips = [
+    checkLabel && `<span class="chip ${checkCls}" title="${esc(pr.failing.length ? `Failing: ${pr.failing.join(" · ")}` : checkTip)}">${checkLabel}</span>`,
+    pr.botThreads && `<span class="chip" title="Unresolved threads a bot, such as an automated reviewer, wrote last">${pr.botThreads} bot thread${pr.botThreads === 1 ? "" : "s"}</span>`,
+    pr.stacked && `<span class="chip" title="Stacked on ${esc(pr.base)}">${parent ? `on #${parent.number}` : `→ ${esc(pr.base)}`}</span>`,
+    `<span class="chip" title="Lines added and removed">+${pr.additions} −${pr.deletions}</span>`,
+    ...sessionsOf(pr).map((c) => `<button class="chip" data-open="${c.id}" title="Open this session">${agentChip(c)}${esc(c.name)}</button>`),
+  ].filter(Boolean).join("");
+  const since = pr.status === "waiting" ? `waiting ${dur(pr.waitingSince)}` : `opened ${ago(pr.createdAt)}`;
+  return `<div class="card pr" style="--c:var(${color})" data-prurl="${esc(pr.url)}" title="Open on GitHub">
+    <div class="ref"><span>${esc(pr.repo.split("/")[1])}#${pr.number}</span><span>${since} · updated ${ago(pr.updatedAt)}</span></div>
+    <div class="t">${linkText(pr.title)}</div>
+    ${pr.why.length ? `<ul class="why">${pr.why.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
+    ${who ? `<div class="who">${who}</div>` : ""}
+    <div class="row">${chips}</div></div>`;
+}
+function prsHtml() {
+  if (!prList) return '<div class="pr-top empty">Reading your pull requests from GitHub…</div>';
+  const text = (p) => [p.repo, `#${p.number}`, p.title, p.head, ...p.requested, ...p.reviews.map((r) => r.who)].join(" ").toLowerCase();
+  const cols = Map.groupBy(prList.prs.filter((p) => !query || text(p).includes(query)), (p) => p.status);
+  const inCol = (key) => cols.get(key) ?? [];
+  const read = prList.at ? `${prList.total} open${prList.total > prList.prs.length ? `; the ${prList.prs.length} updated last are shown` : ""} · read from GitHub ${ago(prList.at)} as ${esc(prList.viewer)}` : "";
+  return `<div class="pr-top"><span class="muted">${read}</span>
+    <button class="btn" data-prrefresh ${prList.reading ? "disabled" : ""}>${prList.reading ? "Refreshing…" : "Refresh"}</button></div>
+    ${prList.error ? `<p class="note bad">Could not read your pull requests: ${esc(prList.error)}</p>` : ""}
+    <div class="grid head">${PR_COLS.map(([key, label, v]) => `<h2><span class="dot" style="background:var(${v})"></span>${label} <span class="n">${inCol(key).length}</span></h2>`).join("")}</div>
+    <div class="grid">${PR_COLS.map(([key, , v]) => `<div class="cell">${inCol(key).map((p) => prCard(p, v)).join("")}</div>`).join("")}</div>`;
+}
+function renderPrs(box) {
+  box.innerHTML = prsHtml();
+}
+async function loadPrs() {
+  try {
+    prList = await (await fetch("/api/prs")).json();
+  } catch {}
+  if (view === "prs") renderPrs(document.getElementById("board"));
+}
+async function refreshPrs() {
+  prList = { ...prList, reading: true };
+  renderPrs(document.getElementById("board"));
+  try {
+    prList = await (await fetch("/api/prs", { method: "POST", headers: WRITE_HEADERS })).json();
+  } catch (e) {
+    prList = { ...prList, reading: false, error: e.message };
+  }
+  if (view === "prs") renderPrs(document.getElementById("board"));
+}
+function prsClick(e) {
+  if (e.target.closest("a[href]")) return;
+  if (e.target.closest("[data-prrefresh]")) return refreshPrs();
+  const session = e.target.closest("[data-open]");
+  if (session) return openCard(session.dataset.open);
+  const card = e.target.closest("[data-prurl]");
+  if (card) window.open(card.dataset.prurl, "_blank", "noopener");
+}
+
 function archivedHtml(cards) {
   if (!cards.length) return '<div class="alist"><div class="empty">Nothing archived. Archive a session from its drawer to put it away here.</div></div>';
   const rows = cards.toSorted((x, y) => (y.archivedAt ?? 0) - (x.archivedAt ?? 0));
@@ -1238,6 +1333,7 @@ async function refresh() {
     const summaries = !sm ? "server is older than this page — restart it" : sm.enabled ? `${data.engines?.cards === "codex" ? "codex" : sm.model} ${sm.calls} call${sm.calls === 1 ? "" : "s"}${sm.errors ? ` (${sm.errors} failed)` : ""} · $${sm.spentUsd.toFixed(3)} this run` : "summaries off";
     document.getElementById("meta").textContent = `${data.cards.length} sessions · ${summaries}${data.grouping ? " · grouping…" : ""} · updated ${new Date(data.at).toLocaleTimeString()}`;
     render();
+    if (view === "prs") await loadPrs();
     if (view === "journal") await loadJournal();
     if (view === "daily") await loadDaily();
     if (openId) await loadDetail(openId, false);
@@ -2021,6 +2117,7 @@ newForm.onsubmit = async (e) => {
 
 // ---- Page wiring
 document.getElementById("board").addEventListener("click", (e) => {
+  if (view === "prs") return prsClick(e);
   if (view === "journal") return journalClick(e);
   if (view === "daily") return dailyClick(e);
   const aact = e.target.closest("[data-aact]");
@@ -2102,6 +2199,7 @@ document.getElementById("views").addEventListener("click", (e) => {
   view = b.dataset.view;
   store.set("agent-board-view", view);
   render();
+  if (view === "prs") loadPrs();
   if (view === "journal") loadJournal();
   if (view === "daily") loadDaily();
 });
