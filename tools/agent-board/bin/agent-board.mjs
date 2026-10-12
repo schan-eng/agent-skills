@@ -147,8 +147,18 @@ function mergedLog(a, b) {
   return `${lines.toSorted((x, y) => at(x).localeCompare(at(y))).join("\n")}\n`;
 }
 
+// The board in this terminal, on the running board, which it starts first when there is none.
+async function tui() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) fail(`The terminal board needs a terminal.\n\n${HELP}`);
+  if (!(await listener())?.board) await start();
+  const { runTui } = await import("../src/tui.mjs");
+  await runTui({ url: BOARD_URL });
+  process.exit(0);
+}
+
 const HELP = `agent-board: a local kanban board over Claude Code and Codex sessions (${BOARD_URL}).
 
+  tui                The board in this terminal, starting it first if needed. The default in a terminal.
   start              Start the board in the background.
   stop               Stop it.
   restart            Stop it, then start this checkout's code.
@@ -162,8 +172,9 @@ const HELP = `agent-board: a local kanban board over Claude Code and Codex sessi
 
 Data: ${DATA} (set AGENT_BOARD_HOME to move it). Port: ${PORT} (AGENT_BOARD_PORT).`;
 
-const [command = "help", ...args] = process.argv.slice(2);
+const [command = process.stdin.isTTY && process.stdout.isTTY ? "tui" : "help", ...args] = process.argv.slice(2);
 const COMMANDS = {
+  tui,
   start,
   stop,
   restart: async () => (await stop(), start()),

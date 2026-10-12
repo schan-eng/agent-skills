@@ -1129,10 +1129,13 @@ const ACTIONS = {
     await fs.rm(join(SAVED_DIR, g.a.sessionId), { recursive: true, force: true });
     return r;
   },
-  // A running session is attached to; one without a process is resumed interactively instead.
-  open: (g) =>
-    openTerminal(g.short, g.a.pid ? `claude attach ${g.short}` : `cd ${shellQuote(g.job?.cwd ?? g.a.cwd)} && claude --resume ${g.a.sessionId}`),
+  open: (g) => openTerminal(g.short, inShell(attachArgs(g))),
 };
+// What joining a session runs, in Terminal or in the TUI: a running session is attached to, and one without a process
+// is resumed interactively in its folder.
+const attachArgs = (g) => (g.a.pid ? { cwd: null, argv: ["claude", "attach", g.short] } : { cwd: g.job?.cwd ?? g.a.cwd, argv: ["claude", "--resume", g.a.sessionId] });
+const codexAttachArgs = (t) => ({ cwd: t.cwd, argv: ["codex", "resume", "-c", "check_for_update_on_startup=false", "--remote", "unix://", t.id] });
+const inShell = ({ cwd, argv }) => `${cwd ? `cd ${shellQuote(cwd)} && ` : ""}${argv.map(shellQuote).join(" ")}`;
 const acting = new Set();
 
 const isDir = (p) => p.startsWith("/") && fs.stat(p).then((st) => st.isDirectory(), () => false);
@@ -1217,7 +1220,7 @@ const CODEX_ACTIONS = {
     if (codexArchive[t.id]) await saveCodexArchive(withoutRecord(codexArchive, t.id));
     return { ok: true, out: "Deleted from Codex." };
   },
-  open: (t, _body, card) => openTerminal(card.id, `cd ${shellQuote(t.cwd)}; codex resume -c check_for_update_on_startup=false --remote unix:// ${t.id}`),
+  open: (t, _body, card) => openTerminal(card.id, inShell(codexAttachArgs(t))),
 };
 
 // A Codex card's routes: what Codex has a counterpart for, with the rest left to Codex itself.
@@ -1227,6 +1230,7 @@ async function codexRoute(req, res, t, action, url) {
   const card = codexCard(t, f, input);
   if (!action) return send(res, 200, { ...card, plan: null, docs: [], tasks: [], team: [], timeline: [], fan: [] });
   if (action === "conversation") return send(res, 200, await codex.steps(t, url.searchParams.get("from")));
+  if (action === "attach") return card.can.open === true ? send(res, 200, codexAttachArgs(t)) : send(res, 409, { ok: false, message: card.can.open });
   if (action === "file") return send(res, ...(await markdownFile(t.cwd, url.searchParams.get("path"))));
   if (action === "tags" || action === "outcome") {
     if (req.method !== "PUT") return send(res, 405, { error: "PUT only" });
@@ -1389,7 +1393,7 @@ async function terminal(req, socket, head, url, { key, allowed = true, idleMs = 
     ws.close();
   };
   out({ size: v.term.size });
-  if (v.term.screen()) out({ data: v.term.screen() });
+  if (v.term.screen()) out({ data: v.term.screen(), replay: true });
   const off = v.term.onData((data) => (data == null ? end() : out({ data })));
   if (v.term.exited) end();
   else fitView(v);
@@ -1546,7 +1550,7 @@ const server = createServer(async (req, res) => {
       const r = await startSession(body);
       return send(res, r.status ?? (r.ok ? 200 : 502), { ok: r.ok, id: r.id ?? null, message: r.out.slice(-2000) });
     }
-    const m = url.pathname.match(/^\/api\/card\/([0-9a-f]{8})(?:\/(summarize|tags|conversation|send|interrupt|settings|rename|archive|unarchive|stop|respawn|remove|open|outcome|file))?$/);
+    const m = url.pathname.match(/^\/api\/card\/([0-9a-f]{8})(?:\/(summarize|tags|conversation|send|interrupt|settings|rename|archive|unarchive|stop|respawn|remove|open|attach|outcome|file))?$/);
     if (m) {
       const g = await find(m[1]);
       if (!g) {
@@ -1558,6 +1562,10 @@ const server = createServer(async (req, res) => {
       if (m[2] === "conversation") {
         const from = url.searchParams.has("from") ? Number(url.searchParams.get("from")) : null;
         return send(res, 200, await readSteps(conversationPath(g.a, g.job), from));
+      }
+      if (m[2] === "attach") {
+        const allowed = capabilities(g.a, g.job).open;
+        return allowed === true ? send(res, 200, attachArgs(g)) : send(res, 409, { ok: false, message: allowed });
       }
       if (ACTIONS[m[2]]) {
         if (req.method !== "POST") return send(res, 405, { error: "POST only" });
