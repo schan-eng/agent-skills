@@ -230,6 +230,17 @@ test("D deletes after asking, closing the open session once it is gone", () => {
   assert.match(run(start(), "3", "down", "D").s.ask.text, /^Delete Put away/);
 });
 
+test("i interrupts after asking, s summarizes, R renames, o opens Terminal and u unarchives, each as the page allows", () => {
+  assert.equal(run(start(), "i").s.ask.text, "Interrupt Older asker? y/n");
+  assert.deepEqual(writes(run(start(), "i", "y").effects), [{ write: "/api/card/aaaa0003/interrupt", pending: "Interrupting…", done: "Interrupted." }]);
+  assert.deepEqual(writes(run(start(), "s").effects), [{ write: "/api/card/aaaa0003/summarize", pending: "Asking for a summary…", done: "Summarizing; the card updates when it is done." }]);
+  assert.deepEqual(writes(run(start(), "R", "!", "enter").effects), [{ write: "/api/card/aaaa0003/rename", body: { name: "Older asker!" }, pending: "Renaming…", done: "Renamed." }]);
+  assert.deepEqual(writes(run(start(), "o").effects), [{ write: "/api/card/aaaa0003/open", pending: "Opening Terminal…", done: "Opened in Terminal." }]);
+  assert.equal(run(start(), "u").s.toast.text, "It is not archived.");
+  assert.deepEqual(writes(run(start(), "3", "u").effects), [{ write: "/api/card/aaaa0007/unarchive", pending: "Unarchiving…", done: "Unarchived." }]);
+  assert.equal(run(start(), "3", "down", "o").s.toast.text, "Unarchive it first.");
+});
+
 test("t sets the tags, and e changes the settings in a form, where the page allows it", () => {
   const tagged = run(start(), "t", "a", ",", " ", "b", "enter");
   assert.deepEqual(writes(tagged.effects), [{ write: "/api/card/aaaa0003/tags", method: "PUT", body: { tags: ["a", "b"] }, pending: "Saving the tags…", done: "Tags saved." }]);
