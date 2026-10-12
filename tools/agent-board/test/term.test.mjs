@@ -34,6 +34,11 @@ test("keysOf names keys whatever modifier was held, and keeps typed characters w
   assert.deepEqual(named, ["up", "down", "right", "pageup", "char:a", "enter", "ctrl:c", "meta:x", "char:👍🏽", "backspace", "tab", "backtab", "escape"]);
 });
 
+test("keysOf reads a terminal's replies, focus reports and kitty key reports as one unknown key each", () => {
+  const replies = "\x1b[?62;22c\x1b[I\x1b[92;5:3u\x1b]11;rgb:0000/0000/0000\x1b\\\x1b[<0;10;5M\x1bP>|kitty\x1b\\q";
+  assert.deepEqual(keysOf(replies).map((k) => k.ch ?? k.name), ["unknown", "unknown", "unknown", "unknown", "unknown", "unknown", "q"]);
+});
+
 test("a bracketed paste is one key, even across chunks", () => {
   const read = createKeyReader();
   assert.deepEqual([...read("x\x1b[200~line1\nli"), ...read("ne2\x1b[201~y")], [{ name: "char", ch: "x" }, { name: "paste", text: "line1\nline2" }, { name: "char", ch: "y" }]);

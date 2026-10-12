@@ -20,8 +20,9 @@ A local kanban board over your Claude Code and Codex sessions, at <http://127.0.
   and what happened in Slack. Yesterday's are written each morning; any recent day can be updated.
 - **Agent view**: `claude agents` or `codex agents` in a docked terminal, and a dialog that starts
   either kind of session.
-- **Terminal**: the same board in the terminal you run `agent-board` in, where `a` hands the terminal
-  to a session and leaving the session brings the board back. See [In a terminal](#in-a-terminal).
+- **Terminal**: the same board in the terminal you run `agent-board` in, with the page's actions and
+  forms. `v` and `V` hand the terminal to Claude's and Codex's agent views and `a` to a session, until
+  Ctrl+\ brings the board back. See [In a terminal](#in-a-terminal).
 
 It needs no packages: just Node and the CLIs it drives.
 
@@ -85,25 +86,35 @@ sandbox, and so do the sessions and model calls it starts.
 ## In a terminal
 
 `agent-board` draws the board in the terminal it runs in, from the same server as the page. From 100
-columns wide the columns sit side by side; narrower, they are listed one under another.
+columns wide the columns sit side by side; narrower, they are listed one under another. The page's
+lanes are a strip above them.
 
 | Keys | Where | What they do |
 | --- | --- | --- |
 | `1` to `5`, Tab | Anywhere; Tab outside a session | Board, PRs, Archived, Daily, Journal. |
 | Arrows or `h` `j` `k` `l`, `g` `G`, PgUp PgDn | Anywhere | Move, or scroll. |
-| `/` | Board, PRs, Archived | Filters as you type; Esc clears it. |
-| Enter | A session | Opens its summary, conversation and links; Enter again attaches. |
-| `a` | A session | Attaches: the session takes the terminal (`claude attach`, `claude --resume` for a stopped one, or `codex resume`), and the board comes back when it exits. |
-| `m` `i` `s` `R` `A` `u` `o` | A session | Message, interrupt, summarize, rename, archive, unarchive, open in a Terminal window. |
-| `n`, `N` | Anywhere | Starts a Claude or a Codex session: what it should do, then the folder, where Tab offers the folders sessions run in. |
-| Enter, `s`, `r` | PRs | Opens the pull request on GitHub, opens the session that worked on it, reads GitHub again. |
-| ← →, `u` | Daily | Changes the day; updates one of its digests. |
+| `v`, `V` | Anywhere | Claude Code's agent view (`claude agents`), or Codex's (`codex agents`), in this terminal. |
+| `c` | Board, Archived | Every session, then Claude's only, then Codex's only. |
+| `[` `]` | Board | The lanes, each with its summary; `n` in a lane tags the new session with it. |
+| `/` | Board, PRs, Archived, Journal | Filters as you type; Esc clears it. |
+| Enter | A session | Opens its Summary, Conversation, Context, Spec, Progress and Team tabs (a Codex one has the first two); Enter again attaches. |
+| `a` | A session | Attaches: a running session takes the terminal (`claude attach` or `codex resume`) until Ctrl+\; a stopped one is resumed with `claude --resume` until it exits. |
+| `m` `i` `s` `R` `t` `e` `p` `o` | A session | Message, interrupt, summarize, rename, tags, settings, PR sync (`/pr-status-sync`), open in a Terminal window. |
+| `A` `u` `S` `X` `D` `O` | A session | Archive (archived: take it out of the agent view), unarchive, stop, restart, delete, and an archived one's status. |
+| `+` `x` | Context tab | Pins a link to the session; unpins the one picked. |
+| `n`, `N` | Anywhere | The page's new-session form, for Claude or Codex: Tab moves between fields, ← → picks, Enter starts it. |
+| Enter, `s`, `a`, `r` | PRs | Opens the pull request on GitHub; opens or attaches to the session that worked on it; reads GitHub again. |
+| ← →, `u`, `E` | Daily | Changes the day; updates one of its digests; switches the repository digest between Claude and Codex. |
+| ← →, `a`, Enter, Space, `<` `>`, `d` | Journal | To-dos, Brief and Notes; adds, edits, checks off, moves to another horizon, deletes. Enter on a suggestion adds it. |
+| `s`, `E` | Journal | Writes the brief; switches its engine. |
 | `?`, Ctrl+Z, `q` | Anywhere | The keys, suspend, quit; in an open session `q`, like Esc, goes back. |
 
-In Claude Code, ← on an empty prompt opens its agent view, and exiting that returns to the board; the
-session keeps running. Ctrl+Z there suspends the session's screen and the board together, and `fg`
-brings both back. The Journal is read-only in the terminal: its to-dos and notes are edited on the
-page. `NO_COLOR` turns colors off.
+An agent view or an attached session has the whole terminal. Ctrl+\ (or Ctrl+Z) brings the board back,
+as does its program exiting. They are the board's shared terminals, the ones the page docks: going back
+to one shows it as it was, and while the page shows it too, it takes the smaller of the two sizes. In
+Claude Code, ← on an empty prompt opens its agent view in the same terminal. A stopped session resumed
+with `claude --resume` runs under the board instead: Ctrl+Z there suspends both, and `fg` brings both
+back. `NO_COLOR` turns colors off.
 
 ## Data
 
@@ -165,7 +176,8 @@ npm test
 ```
 
 `src/server.mjs` is the HTTP and WebSocket server; `src/index.html` is the whole page, and `src/tui.mjs`
-the terminal board, drawn with `term.mjs`. Beside them:
+the terminal board, drawn with `term.mjs`, which hands its terminal to the board's shared terminals with
+`relay.mjs`. Beside them:
 `codex-agents.mjs` reads Codex threads from its app-server daemon, `codex.mjs` and `summarize.mjs`
 make model calls, `prs.mjs`, `journal.mjs` and `digest.mjs` back the PRs, Journal and Daily tabs,
 `context.mjs` and `conversation.mjs` read transcripts, `pty.mjs` and `ws.mjs` carry the terminals,

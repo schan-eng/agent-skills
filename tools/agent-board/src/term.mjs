@@ -103,14 +103,20 @@ export function ansi(spans, color = true) {
 
 const FINAL = { A: "up", B: "down", C: "right", D: "left", H: "home", F: "end", Z: "backtab" };
 const TILDE = { 1: "home", 3: "delete", 4: "end", 5: "pageup", 6: "pagedown", 7: "home", 8: "end" };
-// "[A", "[1;5A" (with a modifier), "[5~" or "OA": the key, whatever modifier was held.
-const sequenceName = (seq) => (seq.at(-1) === "~" ? TILDE[parseInt(seq.slice(1), 10)] : FINAL[seq.at(-1)]) ?? "unknown";
+// "[A", "[1;5A" (with a modifier), "[5~" or "OA": the key, whatever modifier was held. Any other sequence, such as a
+// focus report, a reply to a query or a kitty keyboard report, is "unknown".
+function sequenceName(seq) {
+  if (!/^(\[[0-9;]*|O)[@-~]$/.test(seq)) return "unknown";
+  return (seq.at(-1) === "~" ? TILDE[parseInt(seq.slice(1), 10)] : FINAL[seq.at(-1)]) ?? "unknown";
+}
 const firstGrapheme = (s) => SEGMENTER.segment(s)[Symbol.iterator]().next().value.segment;
 
 const NAMED = { "\x1b": "escape", "\r": "enter", "\n": "enter", "\x7f": "backspace", "\b": "backspace", "\t": "tab" };
+// A control sequence with any parameters, SS3, or a string sequence (OSC, DCS, APC) as a terminal replies with.
+const SEQUENCE = /^\x1b(\[[0-?]*[ -/]*[@-~]|O[A-Za-z]|[\]P_][^\x07\x1b]*(?:\x07|\x1b\\))/;
 // The key at the start of raw input, and how many characters it took.
 function keyAt(rest) {
-  const seq = rest.match(/^\x1b(\[[0-9;]*[@-~]|O[A-Za-z])/);
+  const seq = rest.match(SEQUENCE);
   if (seq) return [{ name: sequenceName(seq[1]) }, seq[0].length];
   const meta = rest.match(/^\x1b([^\x1b\[O\p{Cc}])/u);
   if (meta) return [{ name: "meta", ch: meta[1] }, meta[0].length];

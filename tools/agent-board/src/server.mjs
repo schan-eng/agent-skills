@@ -1393,7 +1393,7 @@ async function terminal(req, socket, head, url, { key, allowed = true, idleMs = 
     ws.close();
   };
   out({ size: v.term.size });
-  if (v.term.screen()) out({ data: v.term.screen() });
+  if (v.term.screen()) out({ data: v.term.screen(), replay: true });
   const off = v.term.onData((data) => (data == null ? end() : out({ data })));
   if (v.term.exited) end();
   else fitView(v);
